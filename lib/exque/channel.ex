@@ -1,4 +1,4 @@
-defmodule Elixir.Channel do
+defmodule Exque.Channel do
   use GenServer
   use AMQP
 

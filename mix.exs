@@ -24,6 +24,12 @@ defmodule Exque.Mixfile do
       {:uuid, "~> 1.1"},
       {:poison, "~> 3.0"},
       {:ex_doc, "~> 0.14", only: :dev},
+      {
+        :amqp_client,
+        git: "https://github.com/dsrosario/amqp_client.git",
+        branch: "erlang_otp_19",
+        override: true
+      },
       {:amqp, "0.1.5"}
     ]
   end

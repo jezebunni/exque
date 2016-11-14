@@ -10,13 +10,13 @@ defmodule Exque.Producing.Message do
   defmodule DSL do
     defmacro message_type(type) do
       quote do
-        def message_type, do: unquote(type)
+        @message_type unquote(type)
       end
     end
 
     defmacro topic(exchange_name) do
       quote do
-        def topic, do: unquote(exchange_name)
+        @topic unquote(exchange_name)
       end
     end
 
@@ -36,33 +36,30 @@ defmodule Exque.Producing.Message do
       # {:attribute, [line: 13],
       #   [:id, {:__aliases__, [counter: 0, line: 13], [:Integer]}, [required: true]]}
 
-      extract = fn(record) ->
-        [name, {:__aliases__, _, [type]}, opts] = record
-        {name, type, opts}
-      end
-
       extracted = case block do
         {:__block__, _, list} ->
           Enum.map(
             list,
             fn({:attribute, _, record}) ->
-              extract(record)
+              [name, {:__aliases__, _, [type]}, opts] = record
+              {name, type, opts}
             end
           )
         {:attribute, _, record} ->
-          [extract(record)]
+          [name, {:__aliases__, _, [type]}, opts] = record
+          [{name, type, opts}]
       end
 
-      mapper = &{
-        [name|_] = &1
+      mapper = fn(record) ->
+        {name, _, _} = record
         name
-      }
+      end
 
       required_list = extracted
       |> Enum.filter_map(
         fn(record) ->
           case record do
-            {name, _, [{required: true}]} -> true
+            {_, _, [required: true]} -> true
             _ -> false
           end
         end,
@@ -73,18 +70,27 @@ defmodule Exque.Producing.Message do
       |> Enum.map(mapper)
 
       type_mapping = extracted
-      |> Enum.reduce(%{}, &{
-        {name, type, _} = &1
-        Map.merge(&2, %{name => type})
-      })
+      |> Enum.reduce(%{}, fn(record, mapping) ->
+        {name, type, _} = record
+        Map.merge(mapping, %{name => type})
+      end)
+
+      # type_mapping = quote do: Macro.escape(type_mapping)
+      # {:%{}, [], [changeset: :Map, id: :Integer, original: :Map]}
+      type_mapping = {
+        :%{},
+        [],
+        Map.to_list(type_mapping)
+      }
 
       quote do
-        @enforce_keys Macro.escape(required_list)
-        defstruct Macro.escape(attribute_list)
+        @type_mapping unquote(type_mapping)
+        @enforce_keys unquote(required_list)
+        defstruct unquote(attribute_list)
 
         def validate(data) do
-          type_check(data, Macro.escape(type_mapping))
-          
+          type_check(data, @type_mapping)
+
           message = __MODULE__
           |> struct
           |> Map.merge(data)
@@ -99,11 +105,16 @@ defmodule Exque.Producing.Message do
       GenServer.start_link(__MODULE__, state, opts)
     end
 
+    # TODO: Find a better way to handle this
+    def validate(_), do: :override_me
+    defoverridable [validate: 1]
+
     def init(state) do
       GenServer.cast(
         MessageRegistry,
-        {__MODULE__, :init, topic, message_type}
+        {__MODULE__, :init, @topic, @message_type}
       )
+      {:ok, state}
     end
 
     @spec propagate(Struct.t) :: :ok
@@ -124,9 +135,10 @@ defmodule Exque.Producing.Message do
 
     @spec type_check(Map.t, List.t) :: Map.t
     def type_check(data, mapping) do
-      Map.each(data, fn({key, val}) ->
+      Enum.each(data, fn({key, val}) ->
         try do
-          Utils.get_type(val) = mapping[key]
+          type = Utils.get_type(val)
+          ^type = mapping[key]
         rescue
           MatchError ->
             raise(
@@ -134,7 +146,7 @@ defmodule Exque.Producing.Message do
               "Expected #{key} to be of type #{mapping[key]}"
             )
         end
-      end
+      end)
       data
     end
   end

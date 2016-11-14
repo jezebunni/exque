@@ -1,8 +1,8 @@
 defmodule Exque.MessageRegistry do
   use GenServer
 
-  def start_link(state, opts \\ []) do
-    GenServer.start_link(__MODULE__, state, opts)
+  def start_link(state) do
+    GenServer.start_link(__MODULE__, state, [])
   end
 
   def init(state), do: {:ok, state}
@@ -19,6 +19,7 @@ defmodule Exque.MessageRegistry do
   end
 
   def handle_cast({mod, :publish, struct}, state) do
-    
+    # Do some options:
+    # https://github.com/pma/amqp/blob/master/lib/amqp/basic.ex#L52
   end
 end
