@@ -22,4 +22,8 @@ defmodule Exque.Utils do
   def get_type(val) when is_list(val) do
     :List
   end
+
+  def get_type(val) when is_atom(val) do
+    :Atom
+  end
 end

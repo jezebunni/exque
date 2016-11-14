@@ -8,6 +8,9 @@ defmodule Exque.Producing.Message do
   end
 
   defmodule DSL do
+    alias Exque.Producing.Channel
+    alias Exque.Utils
+
     defmacro message_type(type) do
       quote do
         @message_type unquote(type)
@@ -55,7 +58,7 @@ defmodule Exque.Producing.Message do
         name
       end
 
-      required_list = extracted
+      required_list = [:message_type] ++ (extracted
       |> Enum.filter_map(
         fn(record) ->
           case record do
@@ -64,10 +67,10 @@ defmodule Exque.Producing.Message do
           end
         end,
         mapper
-      )
+      ))
 
-      attribute_list = extracted
-      |> Enum.map(mapper)
+      attribute_list = [:message_type] ++ (extracted
+      |> Enum.map(mapper))
 
       type_mapping = extracted
       |> Enum.reduce(%{}, fn(record, mapping) ->
@@ -92,45 +95,27 @@ defmodule Exque.Producing.Message do
           type_check(data, @type_mapping)
 
           message = __MODULE__
-          |> struct
-          |> Map.merge(data)
+          |> struct!(%{
+            data | message_type: Module.get_attribute(__MODULE__, :message_type)
+          })
+        end
+
+        def publish(data) do
+          try do
+            data
+            |> validate # will raise an InvalidMessageError
+            |> propagate
+          rescue
+            e in InvalidMessageError -> {:error, e}
+          end
         end
       end
     end
 
-    alias Exque.MessageRegistry
-    alias Exque.Utils
-
-    def start_link(state, opts \\ []) do
-      GenServer.start_link(__MODULE__, state, opts)
-    end
-
-    # TODO: Find a better way to handle this
-    def validate(_), do: :override_me
-    defoverridable [validate: 1]
-
-    def init(state) do
-      GenServer.cast(
-        MessageRegistry,
-        {__MODULE__, :init, @topic, @message_type}
-      )
-      {:ok, state}
-    end
-
     @spec propagate(Struct.t) :: :ok
     def propagate(message) do
-      GenServer.cast(MessageRegistry, {__MODULE__, :publish, message})
+      GenServer.cast(Channel, {:publish, @topic, message})
       :ok
-    end
-
-    def publish(data) do
-      try do
-        data
-        |> validate # will raise an InvalidMessageError
-        |> propagate
-      rescue
-        e in InvalidMessageError -> {:error, e}
-      end
     end
 
     @spec type_check(Map.t, List.t) :: Map.t
@@ -153,7 +138,6 @@ defmodule Exque.Producing.Message do
 
   defmacro __using__(_opts) do
     quote do
-      use GenServer
       import DSL
     end
   end
