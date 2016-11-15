@@ -1,6 +1,27 @@
 # Exque
 
-**TODO: Add description**
+## Producing
+
+### create a message
+```elixir
+defmodule MyApp.MyMessage do
+  use Exque.Producing.Message
+
+  topic :topic1
+  message_type "mymessage.new"
+
+  values do
+    attribute :first_property, Integer, required: true
+    attribute :another_property, String, required: true
+  end
+end
+```
+
+### produce message
+```elixir
+MyApp.MyMessage.publish(%{:first_property => 1, :another_property => "another"})
+# {:ok, %MyApp.MyMessage{ ... }}
+```
 
 ## Installation
 
@@ -21,4 +42,3 @@ If [available in Hex](https://hex.pm/docs/publish), the package can be installed
       [applications: [:exque]]
     end
     ```
-
