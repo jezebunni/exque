@@ -34,7 +34,14 @@ defmodule Exque.Utils do
   #
   # App
   #
-  def app do
-    __MODULE__ |> Atom.to_string |> String.split(".") |> Enum.fetch!(1)
+  def app(mod) do
+    mod |> Atom.to_string |> String.split(".") |> Enum.fetch!(1)
+  end
+
+  def ensure_list(l) when is_list(l), do: l
+  def ensure_list(_), do: []
+
+  def atomize_and_camelize(var) when is_bitstring(var) do
+    var |> Macro.camelize |> String.to_atom
   end
 end

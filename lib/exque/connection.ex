@@ -99,6 +99,7 @@ defmodule Exque.Connection do
 
   defp rabbitmq_connect(state) do
     Logger.debug("Attempting to open connection to AMQP server")
+    #AMQP_URL should really be coming from a config var, not a system env var
     case Connection.open(System.get_env("AMQP_URL")) do
       {:ok, conn} ->
         Logger.info("AMQP connection opened with pid #{inspect conn.pid}")

@@ -109,11 +109,12 @@ defmodule Exque.Producing.Message do
           end
         end
 
+        #TODO: Hostname here should be a config var
         def add_metadata(data) do
           data
           |> Map.put(:metadata, %Exque.Metadata{
             host: System.get_env("HOSTNAME"),
-            app: Utils.app,
+            app: Utils.app(__MODULE__),
             topic: topic,
             created_at: Timex.now,
             uuid: UUID.uuid4(),
