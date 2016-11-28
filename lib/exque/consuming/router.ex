@@ -21,7 +21,7 @@ defmodule Exque.Consuming.Router do
 
     defp define_route(topic, consumer, mapping) do
       quote do
-        @all_topics {unquote(topic), unquote(consumer)}
+        @mappings {unquote(topic), unquote(consumer), unquote(mapping.message_type)}
 
         def route(
           channel,
@@ -79,14 +79,14 @@ defmodule Exque.Consuming.Router do
           consumer
       end
     end
-  end
+  end # end DSL
 
   defmacro __using__(_opts) do
     quote do
       use GenServer
       import DSL
       Module.register_attribute(__MODULE__, :topics, accumulate: true)
-      Module.register_attribute(__MODULE__, :all_topics, accumulate: true)
+      Module.register_attribute(__MODULE__, :mappings, accumulate: true)
       require Logger
       @before_compile unquote(__MODULE__)
       unquote(define_functions)
@@ -95,12 +95,11 @@ defmodule Exque.Consuming.Router do
 
   defmacro __before_compile__(_env) do
     quote do
-      Enum.reduce(@all_topics, %{}, fn({topic, consumer}, carry) ->
+      Enum.reduce(@mappings, %{}, fn({topic, consumer, message_type}, carry) ->
         Map.put(carry, topic, [consumer] ++ Map.get(carry, topic, []))
       end)
       |> Enum.each(fn({topic, consumers}) ->
         Enum.each(Enum.uniq(consumers), fn(consumer) ->
-
           defmodule Module.concat([__MODULE__, Exque.Utils.atomize_and_camelize(topic), consumer]) do
             use GenServer
 
@@ -127,17 +126,13 @@ defmodule Exque.Consuming.Router do
             @spec start_link(Map.t) :: Tuple.t
             def start_link(state) do
               Logger.info("Starting #{__MODULE__}")
-              GenServer.start_link(
-                __MODULE__,
-                Map.merge(
-                  state,
-                  %{
-                    consumers: [],
-                  }
-                ),
-                name: __MODULE__
-              )
+              GenServer.start_link(__MODULE__, state, name: __MODULE__)
             end
+
+            @doc """
+            GenServer.init/1 callback.
+            """
+            def init(state), do: request_channel(state)
 
             @doc """
             GenServer.handle_cast/2 callback.
@@ -161,7 +156,6 @@ defmodule Exque.Consuming.Router do
               AMQP.Exchange.fanout(channel, state.exchange, durable: true)
               AMQP.Queue.bind(channel, state.queue, state.exchange)
               {:ok, _consumer_tag} = AMQP.Basic.consume(channel, state.queue)
-              Logger.debug("shits and giggles")
               {:noreply, Map.merge(state, %{channel: channel})}
             end
 
@@ -189,40 +183,35 @@ defmodule Exque.Consuming.Router do
               raise ChannelCancelledException
             end
 
-            # Confirmation sent by the broker to the consumer process after a Basic.cancel
+            @doc """
+            GenServer.handle_info/2 callback.
+
+            The consumer channel was cancelled remotely.
+            """
             def handle_info({:basic_cancel_ok, _}, _state) do
               raise ChannelCancelledException
             end
 
+            @doc """
+            GenServer.handle_info/2 callback.
+
+            Basic consumption of a message
+            """
             def handle_info({:basic_deliver, payload, %{delivery_tag: tag}}, state) do
               Logger.debug("Payload: #{inspect payload}")
               spawn fn -> consume(state.channel, tag, payload) end
               {:noreply, state}
             end
 
+            @doc """
+            GenServer.handle_info/2 callback.
+
+            Allows the channel to reconnect after a failure on the AMQP connnection
+            """
             def handle_info(:reconnect, state) do
               request_channel(state)
               {:noreply, state}
             end
-
-            def handle_info(message, state) do
-              Logger.debug(inspect message)
-            end
-
-            # TODO:
-            # def handle_info({:DOWN, _, :process, _pid, _reason}, state) do
-            #   Logger.info("AMQP connect #{inspect state.conn.pid} is down")
-            #   {:ok, state} = state
-            #   |> Map.drop([:conn])
-            #   |> cycle_channels
-            #   |> rabbitmq_connect
-            #   {:noreply, state}
-            # end
-
-            @doc """
-            GenServer.init/1 callback.
-            """
-            def init(state), do: request_channel(state)
 
             def terminate(reason, _) do
               Logger.debug("Termination detected because #{inspect reason}")
@@ -232,7 +221,6 @@ defmodule Exque.Consuming.Router do
 
             defp consume(channel, tag, payload) do
               message = payload |> Poison.decode!
-              Logger.debug("supposedly decoded message: #{inspect message}")
               GenServer.cast(:exque_router, {:consume, channel, tag, message})
             end
 
@@ -245,7 +233,9 @@ defmodule Exque.Consuming.Router do
         end)
       end)
 
+      # allows us to access this anytime after compilation
       def topics, do: @topics
+      Logger.debug("Unique topic mappings: #{inspect @topics}")
     end
   end
 
@@ -257,32 +247,23 @@ defmodule Exque.Consuming.Router do
         GenServer.start_link(__MODULE__, state, name: :exque_router)
       end
 
+      @doc """
+      GenServer.init/1 callback
+      """
       def init(state) do
-        Logger.debug inspect topics
         Enum.each(topics, fn({topic, channel}) ->
+          # Spawn the channels in an async fashion
           Process.send_after(self, {:spawn_channel, topic, channel}, 1)
-          # spawn_channel(state.connection, topic, channel)
         end)
 
         {:ok, state}
       end
 
-      def my_raise(arg), do: raise(inspect arg)
+      @doc """
+      GenServer.handle_cast/2 callback
 
-
-      # def handle_cast({:register_consumer, name, module}, state) do
-      #   Logger.debug("when are we #{inspect name} #{inspect module}")
-      #   registered_consumers = Map.get(state, :registered_consumers, %{})
-      #   {
-      #     :noreply,
-      #     Map.put(
-      #       state,
-      #       :registered_consumers,
-      #       Map.put(registered_consumers, name, module)
-      #     )
-      #   }
-      # end
-
+      Receives a consumed message and routes to the appropriate consumer
+      """
       def handle_cast({:consume, channel, tag, message}, state) do
         route(
           channel,
@@ -292,13 +273,18 @@ defmodule Exque.Consuming.Router do
         {:noreply, state}
       end
 
+      @doc """
+      GenServer.handle_info/2 callback
+
+      The async channel spawning triggered in init/1
+      """
       def handle_info({:spawn_channel, topic, channel}, state) do
         spawn_channel(state.connection, topic, channel)
         {:noreply, state}
       end
 
       defp spawn_channel(conn, topic, consumer) do
-        #TODO: add some config for this
+        #TODO: consider adding configuration to change exque prefix
         queue = "exque.#{Exque.Utils.app(__MODULE__) |> Macro.underscore}.#{topic}"
         error_queue = queue <> ".errors"
         resp = Supervisor.start_child(
@@ -313,7 +299,6 @@ defmodule Exque.Consuming.Router do
             }]
           )
         )
-        Logger.debug(inspect resp)
       end
     end
   end
