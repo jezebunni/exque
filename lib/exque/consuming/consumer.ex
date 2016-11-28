@@ -1,9 +1,5 @@
 defmodule Exque.Consuming.Consumer do
   defmacro __using__(opts) do
-    # {_, _, name_parts} = quote do: __MODULE__
-    # name = name_parts |> Atom.to_string |> String.split(".") |> List.last |> String.to_atom
-    # GenServer.cast(:exque_router, {:register_consumer, name, __MODULE__})
-
     quote do
       alias Exque.Consuming.Consumer.MessageNackedException
       alias Exque.Consuming.Consumer.NamespaceError
@@ -20,10 +16,12 @@ defmodule Exque.Consuming.Consumer do
             "YourAppName.Consumers.#{modname}"
       end
 
+      @doc """
+      Gets called by the router to trigger an action.
+      """
       def consume(channel, tag, action, message) do
         result = try do
           apply(__MODULE__, action, [message])
-        # Logger.debug("Consuming Result: #{inspect result}")
         rescue
           _e -> {:error, nil}
         end
