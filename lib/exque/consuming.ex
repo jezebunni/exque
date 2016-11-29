@@ -2,17 +2,16 @@ defmodule Exque.Consuming do
   use Supervisor
 
   alias Exque.Connection
-  alias Exque.Consuming.RouteRegistry
 
-  def start_link do
-    Supervisor.start_link(__MODULE__, [])
+  def start_link(state) do
+    Supervisor.start_link(__MODULE__, state, name: __MODULE__)
   end
 
-  def init([]) do
+  def init(state) do
     [
       worker(Connection, [%{name: :consuming_connection}]),
-      worker(RouteRegistry, [%{connection: :consuming_connection}])
+      worker(state.router, [%{connection: :consuming_connection}])
     ]
-    |> supervise(strategy: :one_for_one)
+    |> supervise(strategy: :one_for_all)
   end
 end
