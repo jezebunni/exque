@@ -86,7 +86,7 @@ defmodule Exque.Consuming.Router do
       use GenServer
       import DSL
       Module.register_attribute(__MODULE__, :topics, accumulate: true)
-      Module.register_attribute(__MODULE__, :all_topics, accumulate: true)
+      Module.register_attribute(__MODULE__, :mappings, accumulate: true)
       require Logger
       @before_compile unquote(__MODULE__)
       unquote(define_functions)
@@ -100,7 +100,6 @@ defmodule Exque.Consuming.Router do
       end)
       |> Enum.each(fn({topic, consumers}) ->
         Enum.each(Enum.uniq(consumers), fn(consumer) ->
-
           defmodule Module.concat([__MODULE__, Exque.Utils.atomize_and_camelize(topic), consumer]) do
             use GenServer
 
