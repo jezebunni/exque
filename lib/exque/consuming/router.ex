@@ -1,5 +1,7 @@
 defmodule Exque.Consuming.Router do
   defmodule DSL do
+    require Logger
+
     defmacro topic(topic, [consumer: consumer], [do: block]) do
       consumer = extract(consumer)
       mappings = extract(block)
@@ -10,7 +12,8 @@ defmodule Exque.Consuming.Router do
         end
       )
 
-      quote do: unquote(routes)
+      catchall = define_catchall_route()
+      quote do: unquote(routes ++ [catchall])
     end
 
     #PRIVATE
@@ -27,7 +30,7 @@ defmodule Exque.Consuming.Router do
           channel,
           tag,
           %{
-            "metadata" => %{
+            :metadata => %{
               "topic" => unquote(topic),
               "type" => unquote(mapping.message_type)
             }
@@ -49,6 +52,15 @@ defmodule Exque.Consuming.Router do
               ]
             )
           end)
+        end
+      end
+    end
+
+    defp define_catchall_route() do
+      quote do
+        def route(channel, tag, message) do
+          AMQP.Basic.ack(channel,tag)
+          Logger.info("Ignored a message #{inspect message}")
         end
       end
     end
