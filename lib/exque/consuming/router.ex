@@ -13,7 +13,10 @@ defmodule Exque.Consuming.Router do
       )
 
       catchall = define_catchall_route()
-      quote do: unquote(routes ++ [catchall])
+      quote do
+        unquote(routes)
+        unquote(catchall)
+      end
     end
 
     #PRIVATE
@@ -31,8 +34,8 @@ defmodule Exque.Consuming.Router do
           tag,
           %{
             :metadata => %{
-              "topic" => unquote(topic),
-              "type" => unquote(mapping.message_type)
+              :topic => unquote(topic),
+              :type => unquote(mapping.message_type)
             }
           } = message
         ) do
@@ -232,7 +235,7 @@ defmodule Exque.Consuming.Router do
             # private
 
             defp consume(channel, tag, payload) do
-              message = payload |> Poison.decode! |> Exque.Utils.atomize_keys 
+              message = payload |> Poison.decode! |> Exque.Utils.atomize_keys
 
               GenServer.cast(:exque_router, {:consume, channel, tag, message})
             end
