@@ -1,5 +1,7 @@
 defmodule Exque.Consuming.Router do
   defmodule DSL do
+    require Logger
+
     defmacro topic(topic, [consumer: consumer], [do: block]) do
       consumer = extract(consumer)
       mappings = extract(block)
@@ -9,8 +11,8 @@ defmodule Exque.Consuming.Router do
           define_route(topic, consumer, mapping)
         end
       )
-
-      quote do: unquote(routes)
+      catchall = define_catchall_route()
+      quote do: unquote(routes ++ [catchall])
     end
 
     #PRIVATE
@@ -49,6 +51,15 @@ defmodule Exque.Consuming.Router do
               ]
             )
           end)
+        end
+      end
+    end
+
+    defp define_catchall_route() do
+      quote do
+        def route(channel, tag, message) do
+          AMQP.Basic.ack(channel,tag)
+          Logger.info("Ignored a message #{inspect message}")
         end
       end
     end
@@ -220,7 +231,10 @@ defmodule Exque.Consuming.Router do
             # private
 
             defp consume(channel, tag, payload) do
-              message = payload |> Poison.decode!
+              message =
+                payload
+                |> Poison.decode!
+                |> Enum.map(fn({k, v}) -> {String.to_atom(k), v} end)
               GenServer.cast(:exque_router, {:consume, channel, tag, message})
             end
 
