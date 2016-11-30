@@ -1,4 +1,12 @@
 defmodule Exque.Utils do
+  def atomize_keys(value) when is_map(value) do
+    for {key, val} <- value, into: %{} do
+      {safe_to_atom(key), atomize_keys(val)}
+    end
+  end
+
+  def atomize_keys(value), do: value
+
   #
   # Get Type
   #
@@ -30,7 +38,6 @@ defmodule Exque.Utils do
     :Atom
   end
 
-
   #
   # App
   #
@@ -44,4 +51,7 @@ defmodule Exque.Utils do
   def atomize_and_camelize(var) when is_bitstring(var) do
     var |> Macro.camelize |> String.to_atom
   end
+
+  defp safe_to_atom(input) when is_atom(input), do: input
+  defp safe_to_atom(input) when is_bitstring(input), do: String.to_atom(input)
 end
