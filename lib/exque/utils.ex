@@ -1,4 +1,12 @@
 defmodule Exque.Utils do
+  def atomize_keys(value) when is_map(value) do
+    for {key, val} <- value, into: %{} do
+      {safe_to_atom(key), atomize_keys(val)}
+    end
+  end
+
+  def atomize_keys(value), do: value
+
   #
   # Get Type
   #

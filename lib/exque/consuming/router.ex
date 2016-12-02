@@ -231,10 +231,7 @@ defmodule Exque.Consuming.Router do
             # private
 
             defp consume(channel, tag, payload) do
-              message =
-                payload
-                |> Poison.decode!
-                |> Enum.map(fn({k, v}) -> {String.to_atom(k), v} end)
+              message = payload |> Poison.decode! |> Exque.Utils.atomize_keys
               GenServer.cast(:exque_router, {:consume, channel, tag, message})
             end
 
