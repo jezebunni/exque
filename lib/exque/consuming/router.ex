@@ -11,17 +11,12 @@ defmodule Exque.Consuming.Router do
           define_route(topic, consumer, mapping)
         end
       )
-<<<<<<< HEAD
 
       catchall = define_catchall_route()
       quote do
         unquote(routes)
         unquote(catchall)
       end
-=======
-      catchall = define_catchall_route()
-      quote do: unquote(routes ++ [catchall])
->>>>>>> feature/consuming
     end
 
     #PRIVATE
